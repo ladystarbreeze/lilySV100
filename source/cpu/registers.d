@@ -4,16 +4,19 @@
 module registers;
 
 import std.bitmanip : bitfields;
+import std.meta     : Alias;
+
 import type;
 
-alias MACH = 1;
-alias MACL = 0;
+alias MACH = Alias!1u;
+alias MACL = Alias!0u;
 
 private const u32 SR_DEFAULT = 0x00000300;
 
 /** SuperH status register */
 union Status_Register
 {
+    /** raw representation of SR value */
     u32 raw = SR_DEFAULT;
 
     mixin(bitfields!(
@@ -56,14 +59,17 @@ struct CPU_Registers
     MA_Register mac;
     /** procedure register */
     u32 pr;
-    /** program counter */
-    u32 pc;
+    /** program counters */
+    u32 pc, next_pc;
 
-    this()
+    @disable this();
+    /** initializes CPU registers */
+    this(const u32 vbr, const u32 pc)
     {
-        vbr = 0;
+        this.vbr = vbr;
         /* SuperH systems normally initialize PC to a value stored in the vector address table.
            On the Loopy, this value is E000480h. */ 
-        pc  = 0x0E00_0480;
+        this.pc      = pc;
+        this.next_pc = pc + 2; 
     }
 }

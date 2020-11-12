@@ -3,7 +3,15 @@
 
 import std.stdio : writeln;
 
-void main()
+import bus, cpu;
+
+void main(string[] args)
 {
-    writeln("Hi.");
+    bus.init(args[1]);
+    cpu.init();
+
+    while (true)
+    {
+        cpu.run();
+    }
 }
