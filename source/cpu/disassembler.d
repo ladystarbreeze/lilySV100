@@ -24,6 +24,12 @@ enum Addressing_Mode
     Register,
     /* register index R0 */
     Register_Index,
+    /* status register SR */
+    Register_SR,
+    /* global base register GBR */
+    Register_GBR,
+    /* vector base register VBR */
+    Register_VBR,
     /* indirect @Rn */
     Indirect,
     /* indirect pre-decrement @-Rn */
@@ -76,6 +82,10 @@ private string get_operand(Addressing_Mode mode, bool src_op)(const u16 instr)
     {
         return op ~ "R0";
     }
+    else static if (mode == Addressing_Mode.Register_VBR)
+    {
+        return op ~ "VBR";
+    }
     else static if (mode == Addressing_Mode.Indirect)
     {
         return op ~ "@R" ~ to!string(get_reg_num!(src_op)(instr));
@@ -119,9 +129,9 @@ private string get_operand(Addressing_Mode mode, bool src_op)(const u16 instr)
 }
 
 /** disassembles instructions and prints them out */
-void disassemble(Addressing_Mode src_mode, Addressing_Mode dst_mode)(const string mnemonic, const Width width, const u16 instr)
+void disassemble(Addressing_Mode src_mode, Addressing_Mode dst_mode, bool swap_ops)(const string mnemonic, const Width width, const u16 instr)
 {
     static const string[] STR_WIDTH = [ ".B", ".W", ".L", "" ];
 
-    writefln("[CPU] %s%s%s%s", mnemonic, STR_WIDTH[width], get_operand!(src_mode, true)(instr), get_operand!(dst_mode, false)(instr));
+    writefln("[CPU] %s%s%s%s", mnemonic, STR_WIDTH[width], get_operand!(src_mode, true ^ swap_ops)(instr), get_operand!(dst_mode, false ^ swap_ops)(instr));
 }
