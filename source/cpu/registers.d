@@ -9,10 +9,12 @@ import type;
 alias MACH = 1;
 alias MACL = 0;
 
+private const u32 SR_DEFAULT = 0x00000300;
+
 /** SuperH status register */
 union Status_Register
 {
-    u32 raw;
+    u32 raw = SR_DEFAULT;
 
     mixin(bitfields!(
         bool, "t", 1,
@@ -56,4 +58,12 @@ struct CPU_Registers
     u32 pr;
     /** program counter */
     u32 pc;
+
+    this()
+    {
+        vbr = 0;
+        /* SuperH systems normally initialize PC to a value stored in the vector address table.
+           On the Loopy, this value is E000480h. */ 
+        pc  = 0x0E00_0480;
+    }
 }
