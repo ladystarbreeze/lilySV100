@@ -1,0 +1,9 @@
+{
+	"name": "lilysv100",
+	"authors": [
+		"Michelle-Marie Schiller"
+	],
+	"description": "Casio Loopy emulator written in D.",
+	"copyright": "Copyright (c) 2020, Lady Starbreeze",
+	"license": "MIT"
+}
