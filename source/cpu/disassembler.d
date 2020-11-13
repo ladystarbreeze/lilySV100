@@ -30,6 +30,8 @@ enum Addressing_Mode
     Register_GBR,
     /* vector base register VBR */
     Register_VBR,
+    /* procedure register PR */
+    Register_PR,
     /* indirect @Rn */
     Indirect,
     /* indirect pre-decrement @-Rn */
@@ -85,6 +87,10 @@ private string get_operand(Addressing_Mode mode, bool src_op)(const u16 instr)
     else static if (mode == Addressing_Mode.Register_VBR)
     {
         return op ~ "VBR";
+    }
+    else static if (mode == Addressing_Mode.Register_PR)
+    {
+        return op ~ "PR";
     }
     else static if (mode == Addressing_Mode.Indirect)
     {
