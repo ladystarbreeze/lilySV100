@@ -7,6 +7,12 @@ import std.stdio : writefln;
 
 import bus, disassembler, registers, type;
 
+private enum ALU_Instruction
+{
+    ADD,
+    TST
+}
+
 private CPU_Registers regs = CPU_Registers(0, 0x0E00_0480);
 
 /* instruction decoding table */
@@ -21,11 +27,14 @@ void init()
     }
 
     instr_table[0x0009] = &i_nop;
+    instr_table[0x000B] = &i_rts;
 
     for (umax i = 0x2000; i < 0x3000; i += 0x10)
     {
+        instr_table[i | 0x1] = &i_mov!(Width.Word, Addressing_Mode.Register, Addressing_Mode.Indirect);
         instr_table[i | 0x2] = &i_mov!(Width.Longword, Addressing_Mode.Register, Addressing_Mode.Indirect);
         instr_table[i | 0x6] = &i_mov!(Width.Longword, Addressing_Mode.Register, Addressing_Mode.Indirect_Pre_Decrement);
+        instr_table[i | 0x8] = &i_alu!(ALU_Instruction.TST, Addressing_Mode.Register);
     }
 
     for (umax i = 0x4000; i < 0x5000; i += 0x100)
@@ -41,9 +50,29 @@ void init()
         instr_table[i | 0x2E] = &i_ldc!(Width.None, Addressing_Mode.Register, Addressing_Mode.Register_VBR);
     }
 
-    for (umax i = 0x6006; i < 0x7006; i += 0x10)
+    for (umax i = 0x6000; i < 0x7000; i += 0x10)
     {
-        instr_table[i] = &i_mov!(Width.Longword, Addressing_Mode.Indirect_Post_Increment, Addressing_Mode.Register);
+        instr_table[i | 0x1] = &i_mov!(Width.Word, Addressing_Mode.Indirect, Addressing_Mode.Register);
+        instr_table[i | 0x2] = &i_mov!(Width.Longword, Addressing_Mode.Indirect, Addressing_Mode.Register);
+        instr_table[i | 0x3] = &i_mov!(Width.None, Addressing_Mode.Register, Addressing_Mode.Register);
+        instr_table[i | 0x4] = &i_mov!(Width.Byte, Addressing_Mode.Indirect_Post_Increment, Addressing_Mode.Register);
+        instr_table[i | 0x5] = &i_mov!(Width.Word, Addressing_Mode.Indirect_Post_Increment, Addressing_Mode.Register);
+        instr_table[i | 0x6] = &i_mov!(Width.Longword, Addressing_Mode.Indirect_Post_Increment, Addressing_Mode.Register);
+    }
+
+    for (umax i = 0x7000; i < 0x8000; i++)
+    {
+        instr_table[i] = &i_alu!(ALU_Instruction.ADD, Addressing_Mode.Immediate);
+    }
+
+    for (umax i = 0x8B00; i < 0x8C00; i++)
+    {
+        instr_table[i] = &i_bcond!(true);
+    }
+
+    for (umax i = 0x9000; i < 0xA000; i++)
+    {
+        instr_table[i] = &i_mov!(Width.Word, Addressing_Mode.Indirect_Disp_PC, Addressing_Mode.Register);
     }
 
     for (umax i = 0xA000; i < 0xB000; i++)
@@ -52,10 +81,10 @@ void init()
         instr_table[i | 0x1000] = &i_bra!(true);
     }
 
-    /* mova @(disp, pc), R0 */
-    for (umax i = 0xC700; i < 0xC800; i++)
+    for (umax i = 0xC000; i < 0xC100; i++)
     {
-        instr_table[i] = &i_mova;
+        instr_table[i | 0x100] = &i_mov!(Width.Word, Addressing_Mode.Register_Index, Addressing_Mode.Indirect_Disp_GBR);
+        instr_table[i | 0x700] = &i_mova;
     }
 
     /* mov.l @(disp, pc), Rn */
@@ -94,9 +123,30 @@ private u32 get_operand(Width width, Addressing_Mode mode, bool src_op)(const u1
     {
         const auto reg = get_reg_num!(src_op)(instr);
 
-        static if ((width == Width.Longword) || (width == Width.None))
+        static if (width == Width.Word)
+        {
+            return regs.r[reg] & 0xFFFF;
+        }
+        else static if ((width == Width.Longword) || (width == Width.None))
         {
             return regs.r[reg];
+        }
+        else
+        {
+            writefln("[CPU] <Error> Unhandled width.");
+
+            throw new Error("Unhandled width");
+        }
+    }
+    else static if (mode == Addressing_Mode.Register_Index)
+    {
+        static if (width == Width.Word)
+        {
+            return regs.r[0] & 0xFFFF;
+        }
+        else static if ((width == Width.Longword) || (width == Width.None))
+        {
+            return regs.r[0];
         }
         else
         {
@@ -109,13 +159,48 @@ private u32 get_operand(Width width, Addressing_Mode mode, bool src_op)(const u1
     {
         return regs.pr;
     }
+    else static if (mode == Addressing_Mode.Indirect)
+    {
+        const auto reg = get_reg_num!(src_op)(instr);
+
+        const auto base = regs.r[reg];
+
+        static if (width == Width.Word)
+        {
+            const auto op = cast(u32)cast(i32)cast(i16)read_word(base);
+        }
+        else static if (width == Width.Longword)
+        {
+            const auto op = read_longword(base);
+        }
+        else
+        {
+            writefln("[CPU] <Error> Unhandled width.");
+
+            throw new Error("Unhandled width");
+        }
+
+        return op;
+    }
     else static if (mode == Addressing_Mode.Indirect_Post_Increment)
     {
         const auto reg = get_reg_num!(src_op)(instr);
 
         const auto base = regs.r[reg];
 
-        static if (width == Width.Longword)
+        static if (width == Width.Byte)
+        {
+            const auto op = cast(u32)cast(i32)cast(i8)read_byte(base);
+
+            ++regs.r[reg];
+        }
+        else static if (width == Width.Word)
+        {
+            const auto op = cast(u32)cast(i32)cast(i16)read_word(base);
+
+            regs.r[reg] += 2;
+        }
+        else static if (width == Width.Longword)
         {
             const auto op = read_longword(base);
 
@@ -134,7 +219,11 @@ private u32 get_operand(Width width, Addressing_Mode mode, bool src_op)(const u1
     {
         const auto disp = cast(u32)(instr & 0xFF);
 
-        static if (width == Width.Longword)
+        static if (width == Width.Word)
+        {
+            return cast(u32)cast(i32)cast(i16)read_word(disp * 2 + get_pc());
+        }
+        else static if (width == Width.Longword)
         {
             return read_longword(disp * 4 + (get_pc() & 0xFFFF_FFFC));
         }
@@ -183,7 +272,11 @@ private void write_operand(Width width, Addressing_Mode dst_mode)(const u16 inst
 
         const auto address = regs.r[reg];
 
-        static if (width == Width.Longword)
+        static if (width == Width.Word)
+        {
+            write_word(address, cast(u16)data);
+        }
+        else static if (width == Width.Longword)
         {
             write_longword(address, data);
         }
@@ -213,6 +306,21 @@ private void write_operand(Width width, Addressing_Mode dst_mode)(const u16 inst
             throw new Error("Unhandled width");
         }
     }
+    else static if (dst_mode == Addressing_Mode.Indirect_Disp_GBR)
+    {
+        const auto disp = cast(u32)(instr & 0xFF);
+
+        static if (width == Width.Word)
+        {
+            write_word(disp * 2 + regs.gbr, cast(u16)data);
+        }
+        else
+        {
+            writefln("[CPU] <Error> Unhandled width.");
+
+            throw new Error("Unhandled width");
+        }
+    }
     else
     {
         writefln("[CPU] <Error> Unhandled addressing mode. ",);
@@ -222,6 +330,73 @@ private void write_operand(Width width, Addressing_Mode dst_mode)(const u16 inst
 }
 
 /* instruction handlers */
+private void i_alu(ALU_Instruction alu_op, Addressing_Mode src_mode)(const u16 instr)
+{
+    static if (src_mode == Addressing_Mode.Register)
+    {
+        const auto src_op = get_operand!(Width.None, Addressing_Mode.Register, true)(instr);
+    }
+    else
+    {
+        const auto src_op = get_operand!(Width.None, Addressing_Mode.Immediate, true)(instr);
+    }
+
+    const auto dst_op = get_operand!(Width.None, Addressing_Mode.Register, false)(instr);
+
+    static if (alu_op == ALU_Instruction.ADD)
+    {
+        write_operand!(Width.None, Addressing_Mode.Register)(instr, src_op + dst_op);
+    }
+    else static if (alu_op == ALU_Instruction.TST)
+    {
+        regs.sr.t = (src_op & dst_op) == 0;
+    }
+    else
+    {
+        writefln("[CPU] <Error> Unhandled ALU instruction. ",);
+
+        throw new Error("Unhandled ALU instruction");
+    }
+
+    debug
+    {
+        static const string[] STR_ALU = [ "ADD", "TST" ];
+
+        disassemble!(src_mode, Addressing_Mode.Register, false)(STR_ALU[alu_op], Width.None, instr);
+    }
+}
+
+private void i_bcond(bool bf)(const u16 instr)
+{
+    const auto disp = get_operand!(Width.None, Addressing_Mode.Immediate, true)(instr);
+
+    const auto target = disp * 2 + get_pc();
+
+    static if (bf)
+    {
+        if (!regs.sr.t)
+        {
+            regs.pc = target;
+            regs.next_pc = target + 2;
+        }
+    }
+    else
+    {
+        if (regs.sr.t)
+        {
+            regs.pc = target;
+            regs.next_pc = target + 2;
+        }
+    }
+
+    debug
+    {
+        static const string[] STR_BCOND = [ "BT", "BF" ];
+
+        writefln("[CPU] %s %08Xh", STR_BCOND[bf], target);
+    }
+}
+
 private void i_bra(bool save_pc)(const u16 instr)
 {
     /* sign-extend 12-bit displacement */
@@ -240,6 +415,41 @@ private void i_bra(bool save_pc)(const u16 instr)
         static const string[] STR_BRA = [ "BRA", "BSR" ];
 
         writefln("[CPU] %s %08Xh", STR_BRA[save_pc], regs.next_pc);
+    }
+}
+
+private void i_ext(bool signed, Width width)(const u16 instr)
+{
+    const auto src_op = get_operand!(Width.None, Addressing_Mode.Register, true)(instr);
+
+    static if (signed)
+    {
+        static if (width == Width.Byte)
+        {
+            write_operand!(Width.None, Addressing_Mode.Register)(cast(u32)cast(i32)cast(i8)(src_op & 0xFF));
+        }
+        else
+        {
+            write_operand!(Width.None, Addressing_Mode.Register)(cast(u32)cast(i32)cast(i16)(src_op & 0xFFFF));
+        }
+    }
+    else
+    {
+        static if (width == Width.Byte)
+        {
+            write_operand!(Width.None, Addressing_Mode.Register)(src_op & 0xFF);
+        }
+        else
+        {
+            write_operand!(Width.None, Addressing_Mode.Register)(src_op & 0xFFFF);
+        }
+    }
+
+    debug
+    {
+        static const string[] STR_EXT = [ "EXTU", "EXTS" ];
+
+        disassemble!(Addressing_Mode.Register, Addressing_Mode.Register, false)(STR_EXT[signed], width, instr);
     }
 }
 
@@ -303,6 +513,16 @@ private void i_nop(const u16 instr)
     debug
     {
         writefln("[CPU] NOP");
+    }
+}
+
+private void i_rts(const u16 instr)
+{
+    regs.next_pc = regs.pr;
+
+    debug
+    {
+        writefln("[CPU] RTS");
     }
 }
 

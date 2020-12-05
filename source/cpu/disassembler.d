@@ -65,9 +65,9 @@ u32 get_reg_num(bool src_op)(const u16 instr)
     }
 }
 
-private string get_operand(Addressing_Mode mode, bool src_op)(const u16 instr)
+private string get_operand(Addressing_Mode mode, bool src_op, bool unswapped_src_op)(const u16 instr)
 {
-    static if (src_op)
+    static if (unswapped_src_op)
     {
         const auto op = " ";
     }
@@ -83,6 +83,10 @@ private string get_operand(Addressing_Mode mode, bool src_op)(const u16 instr)
     else static if (mode == Addressing_Mode.Register_Index)
     {
         return op ~ "R0";
+    }
+    else static if (mode == Addressing_Mode.Register_GBR)
+    {
+        return op ~ "GBR";
     }
     else static if (mode == Addressing_Mode.Register_VBR)
     {
@@ -139,5 +143,5 @@ void disassemble(Addressing_Mode src_mode, Addressing_Mode dst_mode, bool swap_o
 {
     static const string[] STR_WIDTH = [ ".B", ".W", ".L", "" ];
 
-    writefln("[CPU] %s%s%s%s", mnemonic, STR_WIDTH[width], get_operand!(src_mode, true ^ swap_ops)(instr), get_operand!(dst_mode, false ^ swap_ops)(instr));
+    writefln("[CPU] %s%s%s%s", mnemonic, STR_WIDTH[width], get_operand!(src_mode, true ^ swap_ops, true)(instr), get_operand!(dst_mode, false ^ swap_ops, false)(instr));
 }

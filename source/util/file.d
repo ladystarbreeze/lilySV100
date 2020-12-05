@@ -8,7 +8,7 @@ import std.file : read;
 import type;
 
 /** reads a file into a u8 array and returns it */
-u8[] load_file(string path)
+u8[] load_file(const string path)
 {
     /* TODO: error handling!! */
 
