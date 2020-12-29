@@ -60,7 +60,7 @@ struct CPU_Registers
     /** procedure register */
     u32 pr;
     /** program counters */
-    u32 pc, next_pc;
+    u32 pc, next_pc, current_pc;
 
     @disable this();
     /** initializes CPU registers */

@@ -14,6 +14,8 @@
 # Executables
 *.exe
 
+*.txt
+
 # DUB
 .dub
 docs.json
@@ -27,4 +29,5 @@ docs/
 .vscode
 
 # dev folder
+backup
 Loopy
